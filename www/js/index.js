@@ -18,33 +18,42 @@
  */
 var app = {
     // Application Constructor
-    initialize: function() {
+    initialize: function () {
         this.bindEvents();
     },
     // Bind Event Listeners
     //
     // Bind any events that are required on startup. Common events are:
     // 'load', 'deviceready', 'offline', and 'online'.
-    bindEvents: function() {
-        document.addEventListener('deviceready', this.onDeviceReady, false);
+    bindEvents: function () {
+
+        // Chrome on desktop wont fire "onDeviceReady", so we need to check if we are actually running
+        // on a phone, otherwise just call on device ready directly so we can get shit done.
+        var is_app = document.URL.indexOf('http://') === -1 && document.URL.indexOf('https://') === -1;
+        if (is_app) {
+            document.addEventListener('deviceready', this.onDeviceReady, false);
+        } else {
+            $(document).ready(function () {
+                app.onDeviceReady()
+            });
+        }
     },
     // deviceready Event Handler
     //
     // The scope of 'this' is the event. In order to call the 'receivedEvent'
     // function, we must explicitly call 'app.receivedEvent(...);'
-    onDeviceReady: function() {
-        app.receivedEvent('deviceready');
+    onDeviceReady: function () {
+        app.changeBackground();
     },
-    // Update DOM on a Received Event
-    receivedEvent: function(id) {
-        var parentElement = document.getElementById(id);
-        var listeningElement = parentElement.querySelector('.listening');
-        var receivedElement = parentElement.querySelector('.received');
 
-        listeningElement.setAttribute('style', 'display:none;');
-        receivedElement.setAttribute('style', 'display:block;');
+    changeBackground: function () {
+        var pattern = Trianglify({
+            height: window.innerHeight,
+            width: window.innerWidth,
+            cell_size: 60
+        });
 
-        console.log('Received Event: ' + id);
+        $("body").css("background-image", 'url(' + pattern.png() + ')');
     }
 };
 
