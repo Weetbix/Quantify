@@ -1,13 +1,12 @@
-// depends on jquery, jquery.safeReplace, underscore, underscore.string,
-// async.js, and bootstrap-tooltip.js
-var percentChance = function(integerPercent) {
-    // spins a roulette wheel with % chance and tells you if you won
-    return (Math.random() * 100) < integerPercent;
-};
+// This file contains some of the base code from Dictionary Of Numbers
+// originally writted by Glen Chiacchieri http://www.dictionaryofnumbers.com/
+// Permission obtained to use and modify.
+//
+// Note: the code has been stripped down, this class now only handles
+// parsing user input into SI units and quantities.
+
 var DictionaryOfNumbers = {
     init: function() {
-        this.shouldLog = false;
-        this.$wrapper = $('<dfn class="dictionary-of-numbers">');
         // to test this regex: http://tinyurl.com/atm378c
         this.quantityRe = /[\-\$\(]?(negative)?(([\d,\s]*\.?\d+)|(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|one|two|three|four|five|six|seven|eight|nine|ten)\s)\s*([a-z]+[\s\/\-]*){1,3}\)?/gi;
         // have to do separate regexp for currency because there's no way to
@@ -25,152 +24,10 @@ var DictionaryOfNumbers = {
         this.singleDigitRe = /\d/;
         this.numberRe = /[\d]*\.?\d+/;
         this.unitSeparatorRe = /[\s\-]/;
-        // only 4 concurrent connections/workers to background page db
-        this.queryQueue = async.queue(this._querySI, 4);
     },
-    regexpEscape: function(str) {
-        return str.replace(/[\-\/\\\^$*+?.()|\[\]{}]/g, '\\$&');
-    },
-    lookupInElement: function($element) {
-        // go through each match, parse the SI numeral/unit and query them,
-        // while also replacing the original text with an element for later
-        var replacerFunction = _.bind(function($textMatchNode, textMatch, regExpMatch) {
-            var parsedSi = this.findSiNumeralAndUnit(textMatch, true);
-            var $wrapper = this.$wrapper.clone();
-
-            // special case of not matching anything in parens like '500km (300 mi)'
-            if (parsedSi.success && !(_.str.startsWith(textMatch, '(') || _.str.endsWith(textMatch, ')'))) {
-                var siNumeral = parsedSi.siNumeral;
-                var siUnit = parsedSi.siUnit;
-                $wrapper.addClass(this.cssClassForSI(siNumeral, siUnit));
-                this.querySI(
-                    siNumeral,
-                    siUnit,
-                    this.querySuccess(siNumeral, siUnit, textMatch)
-                );
-
-                var textToWrap = textMatch;
-                // remove irrelevant text from the match
-                if (!_.isEmpty(parsedSi.irrelevantTokens)) {
-                    var irrelevantTokens = parsedSi.irrelevantTokens;
-                    irrelevantTokens = _.map(irrelevantTokens, function(word) {
-                        return this.regexpEscape(word);
-                    }, this);
-                    var reText = irrelevantTokens.join(this.unitSeparatorRe.source + '*') + '\\s*';
-                    var textToRemoveRe = new RegExp(reText);
-                    textToWrap = textToWrap.replace(textToRemoveRe, '');
-                }
-                textToWrap = _.str.trim(textToWrap);
-
-                // wrap just the text we want in wrapper for later querying
-                $textMatchNode.safeReplace(textToWrap, function($quantityNode) { $quantityNode.wrap($wrapper); });
-            } else {
-                this.log("can't find a unit conversion for '", textMatch, "'");
-                $textMatchNode.wrap($wrapper);
-            }
-
-        }, this);
-
-        // traverse the visible elements in the body looking for matches
-        _.each(this.slurpRegExps, function(re) {
-            $element.safeReplace(
-                re,
-                replacerFunction,
-                'dfn.dictionary-of-numbers,textarea,code,pre,h1,option',
-                true
-            );
-        });
-    },
-    log: function() {
-        if (this.shouldLog) {
-            var log = Function.prototype.bind.call(console.log, console);
-            log.apply(console, Array.prototype.slice.call(arguments));
-        }
-    },
-    cssClassForSI: function(siNumeral, siUnit) {
-        // convert quantity to css class.
-        // only get the digits/units, keep dashes for negative things, and
-        // change all decimals to dashes
-        var append = (siNumeral + siUnit).match(/\w|\.|\-/g).join('').replace('.', '-');
-        return 'dictionary-of-numbers-quantity-' + append;
-    },
-    Quantity: function(obj) {
-        // pass in the object and its parameters from queries
-        var quantity = obj || {};
-        return quantity;
-    },
-    querySI: function(siNumeral, siUnit, callback) {
-        // public, rate-limited function to query db for quantities
-        this.queryQueue.push({
-            'siNumeral': siNumeral,
-            'siUnit': siUnit
-        }, callback);
-    },
-    _querySI: function(quantity, callback) {
-        // query background page db for quantities like given one
-        chrome.extension.sendMessage(
-            {
-                type: 'quantity',
-                si_numeral: quantity.siNumeral,
-                si_unit: quantity.siUnit
-            },
-            callback
-        );
-    },
-    humanReadableElement: function(quantities) {
-        // TODO: convert  all this to template that won't cause chrome to
-        // complain about eval statements
-        var now = new Date();
-        var cssClass = 'dictionary-of-numbers-human-readable';
-        if ((now.getDate() == 1) && ((now.getMonth() + 1) == 4) && percentChance(10)) {
-            // april fools! say this number is ~ a random number of dogs
-            cssClass += ' dictionary-of-numbers-human-readable-more';
-            return ' <dfn class="'+ cssClass +'" title="April Fools!">[&#8776; '+  _.random(2,30) +' dogs]</dfn>';
-        }
-
-        // pick a quantity to show and remove it from the list of all quantities
-        var randomQuantityIndex = _.random(quantities.length - 1);
-        var quantity = quantities[randomQuantityIndex];
-        quantities = _.filter(quantities, function(quantity, i) {
-            return i !== randomQuantityIndex;
-        });
-
-        // the expanded view quantities on hover
-        var popupHtml = '';
-        if (!_.isEmpty(quantities)) {
-            cssClass += ' dictionary-of-numbers-human-readable-more';
-            _.each(quantities, function(quantity) {
-                popupHtml += '<div>&#8776; '+ quantity.human_readable +'</div>';
-            });
-        }
-
-        // generates the html to be injected after the author's quantity
-        return ' <dfn title="'+ popupHtml +'" class="'+ cssClass +'">[&#8776; '+ quantity.human_readable +']</dfn>';
-    },
-    querySuccess: function(siNumeral, siUnit, originalText) {
-        // create closure to pass original numeral and unit to callback,
-        // append the human-readable description in the DOM
-        return _.bind(function(response) {
-            if (!response) { throw 'error when connecting to background page'; }
-            var quantities = response.quantities;
-            this.log('Queried "', originalText, '" (', siNumeral, siUnit, ') and got "', _.isEmpty(quantities) ? 'nothing': quantities);
-
-            // DOM manipulations
-            // look for things marked for lookup that haven't already had a
-            // human-readable synonym of the number appended
-            var $quantities = $('.dictionary-of-numbers.'+ this.cssClassForSI(siNumeral, siUnit) +':not(.dictionary-of-numbers-processed)');
-            if (!_.isEmpty(quantities)) {
-                // choose a random quantity and append its human-readable
-                // description to the DOM
-                $quantities.append(this.humanReadableElement(quantities));
-                $quantities.find('.dictionary-of-numbers-human-readable-more').tooltip({
-                    html: true,
-                    template: '<div class="dictionary-of-numbers-tooltip"><div class="tooltip-arrow"></div><div class="tooltip-inner"></div></div>'
-                });
-            }
-            $quantities.addClass('dictionary-of-numbers-processed');
-        }, this);
-    },
+    
+    // Takes a user input string and returns the SI units and value 
+    // as an object: { numeral, unit, unused tokens }
     findNumeralAndUnit: function(textMatch, ignoreAmbiguous) {
         // split a match found through the big ugly regex into
         // numeral and unit and return them, as well as irrelevant tokens.
@@ -285,6 +142,9 @@ var DictionaryOfNumbers = {
             }
         }, startMemo, this), textMatch];
     },
+    
+    // Takes users input as a text string and returns an object 
+    // with { success, siNumeral, siUnit }
     findSiNumeralAndUnit: function(textMatch, ignoreAmbiguous) {
         var numberAndUnit = this.findNumeralAndUnit(textMatch, ignoreAmbiguous),
             numeral = numberAndUnit[0],
@@ -341,98 +201,7 @@ var DictionaryOfNumbers = {
         }
         return null;
     },
-    asYouType: function($elements, eventType, textFunction, callback, emptyCallback) {
-        // binds eventType to $elements, looking for all quantities in
-        // $elements using textFunction($target) to get text and then calling
-        // callback([{query: '100m', quantities: [...]}], $target, textFunction)
-        // calls emptyCallback($target) when $elements is cleared
-        var lastText;
-        emptyCallback = emptyCallback || function() {};
-        var _callback =  _.debounce(_.bind(function(evt) {
-            var $target = $(evt.target);
-            var text = _.str.trim(textFunction($target));
-            var potentialQuantities;
-
-            // Turn off asyoutype if the user stopped it
-            if ($target.hasClass('dictionary-of-numbers-suggestions-off')) {
-                $target.off(eventType);
-                return;
-            }
-            // If there's no actual text or we've already queried and the
-            // results are being show then don't requery or change UI
-            if (text == lastText) { return; }
-            if (!text) {
-                emptyCallback($target);
-                return;
-            }
-
-            lastText = text;
-            // go through all matching regexps and find potential quantities
-            potentialQuantities = _.reduce(this.slurpRegExps, function(memo, re) {
-                var results = text.match(re);
-                return (results ? memo.concat(results) : memo);
-            }, []);
-            // cycle through each potential match, see if we can recognize, and
-            // if we can then query for it
-            if (_.isEmpty(potentialQuantities)) {
-                callback([], $target, textFunction);
-            } else {
-                // group all async requests and only after all have returned
-                // call the final user-supplied callback with quantities
-                var allQuantities = [];
-                    // this function waits until all requests have
-                    // completed then calls the user-supplied callback with
-                    // all of the quantities that were found in the bound
-                    // element
-                var finalCallback = _.after(
-                    potentialQuantities.length,
-                    function() {
-                        callback(
-                            _.uniq(allQuantities, function(quantity) {
-                                return quantity.parsedQuery;
-                            }),
-                            $target,
-                            textFunction
-                        );
-                    }
-                );
-                var groupCallback = function(originalText, parsedQuery, quantities) {
-                    // this function groups all the quantities together
-                    // and calls the very last callback after all requests
-                    // have completed
-                    allQuantities.push({
-                        query: originalText,
-                        'parsedQuery': parsedQuery,
-                        'quantities': quantities
-                    });
-                    finalCallback();
-                };
-                _.each(potentialQuantities, _.bind(function(potentialQuantity) {
-                    var parsedQuantity = this.findSiNumeralAndUnit(potentialQuantity, false);
-                    if (parsedQuantity.success) {
-                        // make query
-                        this.querySI(
-                            parsedQuantity.siNumeral,
-                            parsedQuantity.siUnit,
-                            function(response) {
-                                if (!response) {
-                                    throw 'connection error while attempting to query for quantity: '+ potentialQuantity;
-                                } else {
-                                    groupCallback(potentialQuantity, parsedQuantity.parsedQuery, response.quantities);
-                                }
-                            }
-                        );
-                    } else {
-                        groupCallback(potentialQuantity, parsedQuantity.parsedQuery, []);
-                    }
-                }, this));
-            }
-        }, this), 75);
-
-        $elements.on(eventType, _callback);
-        $elements.addClass('dictionary-of-numbers-as-you-type');
-        $elements.trigger(eventType);
-    },
+    
     spelledOutNumbers: {
         twenty: 20,
         thirty: 30,
@@ -453,6 +222,7 @@ var DictionaryOfNumbers = {
         nine: 9,
         ten: 10
     },
+    
     currencyOrdersOfMagnitude: {
         'k': 1e3,
         'K': 1e3,
@@ -464,6 +234,7 @@ var DictionaryOfNumbers = {
         'BN': 1e9,
         'Bn': 1e9
     },
+    
     ordersOfMagnitude: {
         'negative': -1,
         'hundred': 1e2,
@@ -477,6 +248,7 @@ var DictionaryOfNumbers = {
         'septillion': 1e24,
         'octillion': 1e27
     },
+    
     conversions: {
         // current
         'A': null,
@@ -718,6 +490,7 @@ var DictionaryOfNumbers = {
         'degrees Celsius': '°C',
         'degrees celsius': '°C'
     },
+    
     ambiguousUnits: {
         'm': null, // meters, million, minutes
         's': null, // pluralize, seconds

@@ -1,21 +1,5 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+// The main application code
+
 var app = {
     // Application Constructor
     initialize: function () {
@@ -42,64 +26,39 @@ var app = {
     //
     // The scope of 'this' is the event. In order to call the 'receivedEvent'
     // function, we must explicitly call 'app.receivedEvent(...);'
-    onDeviceReady: function () {
-        
+    onDeviceReady: function () {        
         var queryInput = $("#search");
         
-        //db.init();
         DictionaryOfNumbers.init();
-        
         Database.init();
-
         
         queryInput.change(function(){
             // First, find the number and unit from the users input
             var input = DictionaryOfNumbers.findSiNumeralAndUnit(queryInput.val(), false);
-            
+
+            var resultText = "<h2>No results found</h2>";
             var result = Database.queryResults(input.siNumeral, input.siUnit);
             
-            if(result.count() == 0)
+            if(result.count() !== 0)
             {
-                $("#results").html( $("h3").text("No results found") );
-            }
-            else 
-            {
-                var formattedResults = result.map(function(result){
+                resultText = result.map(function(result){
                     return "<h2>" + result.human_readable + "</h2>";
                 });
-                
-                $("#results").html(formattedResults);
             }
+            
+            $("#results").fadeOut(200, function() {
+                $("#results").html(resultText);
+            }).fadeIn(200);
         });
-        
-        
-        /*
-        DictionaryOfNumbers.asYouType(
-            queryInput,
-            'change',
-            function($target) 
-            { 
-                return $target.val(); 
-            },
-            
-            function(allQuantities) {
-                $("#results").html(allQuantities);
-            },
-            function ($target) {
-                //$('#results #quantities').remove();
-            }
-        );*/
-        
-        /*
-        queryInput.change(function(){
-            
-
-            
-        });*/
         
         app.changeBackground();
     },
+    
+    changeResultsText: function(text){
+        $("#results").html(text);
+    },
 
+    // Show a pretty generated background
     changeBackground: function () {
         var pattern = Trianglify({
             height: window.innerHeight,
