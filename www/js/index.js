@@ -43,6 +43,60 @@ var app = {
     // The scope of 'this' is the event. In order to call the 'receivedEvent'
     // function, we must explicitly call 'app.receivedEvent(...);'
     onDeviceReady: function () {
+        
+        var queryInput = $("#search");
+        
+        //db.init();
+        DictionaryOfNumbers.init();
+        
+        Database.init();
+
+        
+        queryInput.change(function(){
+            // First, find the number and unit from the users input
+            var input = DictionaryOfNumbers.findSiNumeralAndUnit(queryInput.val(), false);
+            
+            var result = Database.queryResults(input.siNumeral, input.siUnit);
+            
+            if(result.count() == 0)
+            {
+                $("#results").html( $("h3").text("No results found") );
+            }
+            else 
+            {
+                var formattedResults = result.map(function(result){
+                    return "<h2>" + result.human_readable + "</h2>";
+                });
+                
+                $("#results").html(formattedResults);
+            }
+        });
+        
+        
+        /*
+        DictionaryOfNumbers.asYouType(
+            queryInput,
+            'change',
+            function($target) 
+            { 
+                return $target.val(); 
+            },
+            
+            function(allQuantities) {
+                $("#results").html(allQuantities);
+            },
+            function ($target) {
+                //$('#results #quantities').remove();
+            }
+        );*/
+        
+        /*
+        queryInput.change(function(){
+            
+
+            
+        });*/
+        
         app.changeBackground();
     },
 
